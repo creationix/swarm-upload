@@ -1,0 +1,12 @@
+#drop_zone {
+    border: 2px dashed #ccc;
+    width: 100%;
+    padding: 100px 20px;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+#drop_zone.dragging {
+    border: 4px dashed #ccc;
+    font-weight: bold;
+}
