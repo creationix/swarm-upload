@@ -1,39 +1,41 @@
-import { put, head } from '@vercel/blob'
+import { put, head, BlobNotFoundError } from '@vercel/blob'
 
 export async function POST(req: Request) {
   const url = new URL(req.url)
 
   const hash = url.searchParams.get('hash')
-  const level = url.searchParams.get('level')
-  const command = level === '0' ? 'chunk' : 'manifest'
-  console.log({ hash, level, command })
-  if (command === 'manifest') {
-    const buffer = await req.arrayBuffer()
-    const body = new Uint8Array(buffer)
-    await put(hash, buffer, {
-      contentType: 'application/x-swarm-manifest',
-      access: 'public',
-    })
+  const level = parseInt(url.searchParams.get('level'), 10)
+  console.log(`Uploading ${hash}/${level}...`)
+  const buffer = await req.arrayBuffer()
 
-    const needs: Uint8Array[] = []
-    for (let o = 0; o < body.length; o += 32) {
-      const subHash = body.subarray(o, o + 32)
-      if (!(await hasChunk(bytesToHex(subHash)))) {
-        needs.push(subHash)
-      }
-    }
-    const needsManifest = new Uint8Array(needs.length * 32)
-    for (let i = 0; i < needs.length; i++) {
-      needsManifest.set(needs[i], i * 32)
-    }
-    return new Response(needsManifest, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/x-swarm-manifest',
-      },
-    })
+  await put(hash, buffer, {
+    access: 'public',
+    contentType: level > 0 ? 'application/x-swarm-manifest' : 'application/octet-stream',
+    cacheControlMaxAge: 300,
+  })
+
+  if (level === 0) {
+    return new Response(null, { status: 204 })
   }
-  return Response.json({ hash, level, command })
+
+  const body = new Uint8Array(buffer)
+  const needs: Uint8Array[] = []
+  for (let o = 0; o < body.length; o += 32) {
+    const subHash = body.subarray(o, o + 32)
+    if (!(await hasChunk(bytesToHex(subHash)))) {
+      needs.push(subHash)
+    }
+  }
+  const needsManifest = new Uint8Array(needs.length * 32)
+  for (let i = 0; i < needs.length; i++) {
+    needsManifest.set(needs[i], i * 32)
+  }
+  return new Response(needsManifest, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/x-swarm-manifest',
+    },
+  })
 }
 
 async function hasChunk(hash: string) {
@@ -41,8 +43,10 @@ async function hasChunk(hash: string) {
     await head(hash)
     return true
   } catch (err) {
-    console.log(err)
-    return false
+    if (err instanceof BlobNotFoundError) {
+      return false
+    }
+    throw err
   }
 }
 
