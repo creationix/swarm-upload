@@ -145,9 +145,10 @@ async function fullUploadChunk(hash, level) {
   if (!chunk) {
     throw new Error(`Chunk not found: ${hash}`)
   }
-  for (const need of await uploadChunk(hash, level, chunk)) {
-    await fullUploadChunk(need, level - 1)
-  }
+  const needs = await uploadChunk(hash, level, chunk)
+  await Promise.all(
+    needs.map(need => fullUploadChunk(need, level - 1))
+  )
 }
 
 /**
@@ -168,7 +169,6 @@ async function processData(data, level = 0) {
   // If it's larger than a chunk, split it into chunks and process each one.
   // Store the hashes as a new doc and recurse the algorithm.
   const chunksNeeded = Math.ceil(len / BLOCK_SIZE)
-  console.log({ chunksNeeded })
   const metaFile = new Uint8Array(chunksNeeded * HASH_SIZE)
   for (let i = 0; i < chunksNeeded; i++) {
     const chunk = data.subarray(i * BLOCK_SIZE, i * BLOCK_SIZE + BLOCK_SIZE)
